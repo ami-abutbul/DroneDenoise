@@ -1,9 +1,8 @@
+from DroneDenoise.Models.Configuration import TSPspeech_path
+from DroneDenoise.Utilities.file_utils import dir_to_file_list
 import os
 import numpy as np
 import scipy.io.wavfile
-
-from Models.Configuration import TSPspeech_path
-from Utilities.file_utils import dir_to_file_list
 
 
 class TSPspeechHandler(object):
@@ -27,6 +26,6 @@ class NoiseHandler(object):
         return handler.get_noise()
 
 
-if __name__ == '__main__':
-    Fs, wav_data = scipy.io.wavfile.read('C:\\Users\\il115552\\Desktop\\TSPspeech\\48k\\FD\\FD19_01.wav')
-    print(Fs)
+# if __name__ == '__main__':
+#     Fs, wav_data = scipy.io.wavfile.read('C:\\Users\\il115552\\Desktop\\TSPspeech\\48k\\FD\\FD19_01.wav')
+#     print(Fs)
