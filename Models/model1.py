@@ -1,56 +1,28 @@
-from keras.models import Sequential, Model
-from keras.layers.core import Dense, Activation, Dropout, Flatten, Permute, RepeatVector, Lambda
-from keras.layers.recurrent import LSTM
 from DroneDenoise.Models.Configuration import *
-from DroneDenoise.DataHandler.DataLoader import SignalsHandler
-from DroneDenoise.Utilities.file_utils import create_dir
-from keras.callbacks import EarlyStopping, ModelCheckpoint
-import matplotlib.pyplot as plt
-from keras.callbacks import Callback
+from keras.layers import Dense, Input, multiply
+from keras.layers.recurrent import LSTM
+from keras.models import Model
+from keras.regularizers import l2
+from keras import optimizers
 
 
-def build_model():
-    model = Sequential()
+class Model1(object):
+    def build_model(self):
+        print('Build model...')
+        main_input = Input(shape=(None, window_size), name='main_input')
+        out = Dense(window_size // 2, activation='relu', name='encoder_dense1')(main_input)  # output shape: 480
+        out = Dense(window_size // 4, activation='relu', name='encoder_dense2')(out)         # output shape: 240
+        out = Dense(window_size // 8, activation='relu', name='encoder_dense3')(out)         # output shape: 120
+        out = Dense(window_size // 16, activation='relu', name='encoder_dense4')(out)        # output shape: 60
+        out = LSTM(60, activation='relu', kernel_regularizer=l2(), recurrent_regularizer=l2(), return_sequences=False, stateful=False)(out)
+        out = Dense(window_size // 8, activation='relu', name='decoder_dense1')(out)         # output shape: 120
+        out = Dense(window_size // 4, activation='relu', name='decoder_dense2')(out)         # output shape: 240
+        out = Dense(window_size // 2, activation='relu', name='decoder_dense3')(out)         # output shape: 480
+        out = Dense(window_size     , activation='sigmoid', name='decoder_dense4')(out)      # output shape: 960
+        output = multiply([out, main_input])
 
-    model.add(LSTM(512, batch_input_shape=(1, window_size, 1), activation='relu', return_sequences=False, stateful=True))
-    model.add(Dense(1, activation='linear'))
+        model = Model(inputs=main_input, outputs=[output])
+        model.compile(loss="mse", optimizer=optimizers.Adam(lr=1e-4), metrics=['mse'])
 
-    model.compile(loss="mean_squared_error", optimizer="adam")
-
-    model.summary()
-    return model
-
-
-# def show(title="", wave1=[], wave2=[], wave3=[], legend=[]):
-#     plt.figure(figsize=(25, 8))
-#     plt.title(title)
-#     plt.plot(wave1, 'b')
-#     plt.plot(wave2, 'g')
-#     plt.plot(wave3, 'r')
-#     plt.legend(legend, loc='upper right');
-#     plt.show()
-
-
-def train(signals_dir):
-    model = build_model()
-    create_dir(model_dir)
-    checkpointer = ModelCheckpoint(filepath=model_saved_weights, monitor='loss', verbose=2, save_best_only=True, mode='min')
-    early_stopping = EarlyStopping(monitor='loss', patience=2, verbose=0, mode='min')
-
-    signals_handler = SignalsHandler(signals_dir)
-
-    losses = []
-    for i in range(10):
-        signal = signals_handler.get_signal()
-        hist = model.fit(signal.X[0:1000], signal.Y[0:1000], epochs=1, batch_size=1, verbose=2, shuffle=False, callbacks=[checkpointer, early_stopping])
-        losses.append(hist.history['loss'])
-
-
-if __name__ == '__main__':
-    if mode == "train":
-        print("Start training ..")
-        if platform.system() == 'Linux':
-            train()
-        else:
-            train('D:\\private_git\\DroneDenoise\\Data\\Extracted')
-
+        model.summary()
+        return model
