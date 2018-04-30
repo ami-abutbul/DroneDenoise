@@ -2,11 +2,7 @@ from DroneDenoise.Utilities.file_utils import mat_to_array, dir_to_file_list, di
 from DroneDenoise.DataHandler.NoiseHandler import NoiseHandler
 from DroneDenoise.Models.Configuration import *
 import numpy as np
-# import matplotlib.pyplot as plt
-# from DroneDenoise.Utilities.sound_utils import play_signal
 import scipy.io.wavfile
-from random import shuffle
-import scipy.fftpack
 
 
 class Signal(object):
@@ -15,12 +11,20 @@ class Signal(object):
         self.X = np.array(mat_to_array(file_path))
         self.Y = np.copy(self.X).reshape([-1])
         self.noise_handler = noise_handler
+        # self.file_path = file_path
+        # _, wav_data = scipy.io.wavfile.read('../DataHandler/clean.wav')
+        # self.X = np.array(wav_data)
+        # self.Y = np.copy(self.X).reshape([-1])
+        # self.noise_handler = noise_handler
 
     def do_augmentation(self):
         scale = np.random.uniform(low=0.5, high=3, size=(1,))[0]
         self.X = scale * self.X
+        self.Y = scale * self.Y
 
     def add_noise(self):
+        # Fs, wav_data = scipy.io.wavfile.read('../DataHandler/noise.wav')
+        # self.X = wav_data
         n = np.random.randint(number_of_background_noise // 2, number_of_background_noise)
         for i in range(n):
             _, wav_data = self.noise_handler.get_noise()
@@ -29,7 +33,7 @@ class Signal(object):
                 wav_data = wav_data[:len(self.X) - xi]
             noise = Signal.padding_noise(wav_data, xi, len(self.X))
             noise = noise.reshape([-1, 1])
-            self.X += 2*noise
+            self.X += noise
 
     @classmethod
     def padding_noise(cls, noise, xi, X_len):
@@ -105,7 +109,7 @@ class SignalsHandler(object):
     def _create_windowed_mat(cls, mat):
         res = []
         for i in range(len(mat)):
-            res.append(SignalsHandler.window(mat[i], w=window_size, o=window_size//2))
+            res.append(SignalsHandler.window(mat[i], w=window_size, o=window_size // 2))
         return np.array(res)
 
     @classmethod
@@ -116,101 +120,42 @@ class SignalsHandler(object):
             for j in range(len(mat[0])):
                 window = mat[i, j]
                 window = np.reshape(window, (window.shape[0],))
-                res_line.append(np.abs(np.fft.fft(window)))
+                window = window
+                res = np.fft.fft(window)
+                res_line.append(res)
             res_mat.append(res_line)
         return np.array(res_mat)
 
+    @classmethod
+    def create_test(cls, s):
+        fixed_len = int((len(s) // window_size) * window_size)
+        s = s[:fixed_len]
+        s_window = SignalsHandler._create_windowed_mat([s])
+        return SignalsHandler._fft_on_windows(s_window)
 
-if __name__ == '__main__':
-    # l = [[1,2,3,4,5,6,7,8,9], [10,20,30,40,50,60,70,80,90]]
-    # l = np.array(l)
-    # x = SignalsHandler._create_windowed_mat(l)
-    # x = SignalsHandler._fft_on_windows(x)
-    # print(type(x[0,0]))
+    @classmethod
+    def reconstruct_windowed_signal(cls, s):
+        res = np.array([])
+        sin_mask = np.hanning(window_size)
+        for window in s[0]:
+            window = np.reshape(window, (window.shape[0],))
+            i_window = np.fft.ifft(window).real
 
-    import time
-    tik = time.time()
-    sh = SignalsHandler('D:\\private_git\\DroneDenoise\\Data\\Extracted_Raw_Drone\\sides')
-    x, y = sh.get_dataset()
-    tok = time.time()
-    print(x.shape)
-    print(tok - tik)
-    w = x [0,10]
-    print(w.shape)
+            i_window = i_window * sin_mask #@@@
 
-    # sh = SignalsHandler('D:\\private_git\\DroneDenoise\\Data\\Extracted_Raw_Drone\\sides')
-    # signal = sh.get_signal()
-    # signal.add_noise()
-    # s_noise = signal.X[110000:110000 + 1000]
-    # s_clean = signal.Y[110000:110000 + 1000]
-    #
-    # s_noise = np.reshape(s_noise, (s_noise.shape[0],))
-    #
-    #
-    # fig, ax = plt.subplots()
-    # ax.plot(s_noise, label='noise')
-    # ax.plot(s_clean, label='clean')
-    # plt.legend(loc='best')
-    # plt.grid(True)
-    # plt.show()
-    # #
-    # # # scipy.io.wavfile.write("./test.wav", 48000, signal.X)
-    # # # from DroneDenoise.Utilities.sound_utils import play_signal
-    # # # play_signal(signal.X, 48000)
-    # #
-    # #
-    # # # N = 256
-    # # # t = np.arange(N)
-    # # # sp = np.fft.fft(np.sin(t))
-    # # # freq = np.fft.fftfreq(t.shape[-1])
-    # # # plt.plot(sp.imags)
-    # # # # plt.plot(freq, sp.real, freq, sp.imag)
-    # # # plt.show()
-    # #
-    # #
-    # #
-    # #
-    # #
-    # #
-    # #
-    # #
-    # Number of samplepoints
-    N = len(w)
-    # sample spacing
-    T = 1.0 / 48000.0
-    x = np.linspace(0.0, N * T, N)
-    # y = np.sin(50.0 * 2.0 * np.pi * x) + 0.5 * np.sin(80.0 * 2.0 * np.pi * x)
-    # yf_clean = np.fft.fft(w)
-    yf_noise = w#np.fft.fft(w)
-    # print(len(yf_noise))
-    # wn = int(T*N*7500)
-    # yf_noise[wn:-wn] = 0
-    xf = np.linspace(0.0, 1.0 / (2.0 * T), N//2)
+            if len(res) == 0:
+                res = np.concatenate([res, i_window])
+            else:
+                pad = np.zeros(len(res) - len(i_window)//2)
+                pad = np.concatenate([pad, i_window[:len(i_window)//2]])
+                res += pad
+                res = np.concatenate([res, i_window[len(i_window)//2:]])
+        return res
 
-    fig, ax = plt.subplots()
-    ax.plot(xf, 2.0 / N * np.abs(yf_noise[:N//2]), label='noise')
-    # ax.plot(xf, 2.0 / N * np.abs(yf_clean[:N//2]), label='clean')
-    plt.legend(loc='best')
-    plt.show()
-    # yf_clean = np.fft.ifft(yf_noise)
-    # play_signal(yf_clean, 48000)
-    #
-    # # signal = sh.get_signal()
-    # # signal.add_noise()
-    # play_signal(signal.X[:len(signal.X)//30], 48000)
-
-    # N = len(w)
-    # T = 1.0 / 48000.0
-    # s_noise = w
-    # s_noise = np.reshape(s_noise, (s_noise.shape[0],))
-    # yf_noise = np.fft.fft(s_noise)
-    # wn = int(T*N*500)
-    # yf_noise[wn:-wn] = 0
-    # print("@@@")
-    # y_ifft = np.fft.ifft(yf_noise).real
-    # yf_noise[1:] = 0
-    # c = y_ifft[0]
-    # # remove c, apply factor of 2 and re apply c
-    # y_ifft = (y_ifft - c) * 2 + c
-    # print("@@@")
-    # play_signal(y_ifft, 48000)
+# if __name__ == '__main__':
+#     import scipy.io.wavfile
+#     sh = SignalsHandler('D:\\private_git\\DroneDenoise\\Data\\Extracted_Raw_Drone\\sides')
+#     signal = sh.get_signal()
+#     signal.add_noise()
+#     scipy.io.wavfile.write('./clean.wav',48000, signal.Y)
+#     scipy.io.wavfile.write('./noise.wav',48000, signal.X)

@@ -6,7 +6,7 @@ from keras.regularizers import l2
 from keras import optimizers
 
 
-class Model1(object):
+class Model2(object):
     def build_model(self):
         print('Build model...')
         main_input = Input(shape=(None, window_size), name='main_input')
@@ -14,12 +14,11 @@ class Model1(object):
         out = Dense(window_size // 4, activation='relu', name='encoder_dense2')(out)         # output shape: 240
         out = Dense(window_size // 8, activation='relu', name='encoder_dense3')(out)         # output shape: 120
         out = Dense(window_size // 16, activation='relu', name='encoder_dense4')(out)        # output shape: 60
-        out = LSTM(60, activation='relu', kernel_regularizer=l2(), recurrent_regularizer=l2(), return_sequences=False, stateful=False)(out)
+        out = LSTM(60, activation='relu', kernel_regularizer=l2(), recurrent_regularizer=l2(), return_sequences=True, stateful=False)(out)
         out = Dense(window_size // 8, activation='relu', name='decoder_dense1')(out)         # output shape: 120
         out = Dense(window_size // 4, activation='relu', name='decoder_dense2')(out)         # output shape: 240
         out = Dense(window_size // 2, activation='relu', name='decoder_dense3')(out)         # output shape: 480
         out = Dense(window_size     , activation='sigmoid', name='decoder_dense4')(out)      # output shape: 960
-        # out = Reshape((time_series, window_size))(out)
         output = multiply([out, main_input])
 
         model = Model(inputs=main_input, outputs=[output])
